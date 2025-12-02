@@ -1,0 +1,13 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: stagging
+configMapGenerator:
+  - name: nginx-index
+    files:
+      - index.html
+generatorOptions:
+  disableNameSuffixHash: false
+
+resources:
+  - deployment.yaml
+  - service.yaml
