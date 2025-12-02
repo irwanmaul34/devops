@@ -1,0 +1,18 @@
+- name: Install dan menjalankan nginx
+  hosts: webservers
+  become: true
+  tasks:
+    - name: Update apt dan cache
+      apt:
+        update_cache: yes
+
+    - name: Install Nginx
+      apt:
+        name: nginx
+        state: present
+
+    - name: memastikan nginx berjalan
+      service:
+        name: nginx
+        state: started
+        enabled: yes
