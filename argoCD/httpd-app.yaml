@@ -1,0 +1,20 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: httpd-app
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/refresh: "60s"
+spec:
+  project: default
+  source:
+    repoURL: 'https://github.com/irwanmaul34/argocd-simple-apps'
+    targetRevision: main
+    path: httpd
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: stagging
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
