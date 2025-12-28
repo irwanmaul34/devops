@@ -1,0 +1,15 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: myapp-prod
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/irwanmaul34/project-devops-gitops.git
+    targetRevision: main
+    path: production
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: production
+  syncPolicy: {}
