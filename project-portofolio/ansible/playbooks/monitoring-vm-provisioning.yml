@@ -137,6 +137,20 @@
                 - source_labels: [__meta_kubernetes_service_name]
                   action: keep
                   regex: node-exporter
+                - source_labels: [__meta_kubernetes_endpoint_port_name]
+                  action: keep
+                  regex: metrics
+            - job_name: 'kube-state-metrics'
+              static_configs:
+              - targets:
+                - '192.168.56.3:30080'  # HTTP metrics
+                - '192.168.56.3:30081'  # Telemetry
+            - job_name: 'kubelet'
+              scheme: http
+              static_configs:
+              - targets:
+                - 192.168.56.3:10250
+
 
 
     - name: Create Prometheus systemd service
