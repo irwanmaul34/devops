@@ -1,0 +1,81 @@
+- name: Deploy Kubernetes Monitoring Exporters
+  hosts: VM1
+  become: true
+  tasks:
+    - name: Create monitoring namespace
+      shell: kubectl create namespace monitoring --dry-run=client -o yaml | kubectl apply -f -
+
+    - name: Deploy node-exporter (DaemonSet)
+      shell: |
+        kubectl apply -f - <<'EOF'
+        apiVersion: apps/v1
+        kind: DaemonSet
+        metadata:
+          name: node-exporter
+          namespace: monitoring
+          labels:
+            app: node-exporter
+        spec:
+          selector:
+            matchLabels:
+              app: node-exporter
+          template:
+            metadata:
+              labels:
+                app: node-exporter
+            spec:
+              hostPID: true
+              hostNetwork: true
+              containers:
+              - name: node-exporter
+                image: prom/node-exporter:v1.7.0
+                args:
+                  - --path.procfs=/host/proc
+                  - --path.sysfs=/host/sys
+                  - --path.rootfs=/rootfs
+                ports:
+                  - containerPort: 9100
+                    hostPort: 9100
+                volumeMounts:
+                  - name: proc
+                    mountPath: /host/proc
+                    readOnly: true
+                  - name: sys
+                    mountPath: /host/sys
+                    readOnly: true
+                  - name: root
+                    mountPath: /rootfs
+                    readOnly: true
+              volumes:
+                - name: proc
+                  hostPath:
+                    path: /proc
+                - name: sys
+                  hostPath:
+                    path: /sys
+                - name: root
+                  hostPath:
+                    path: /
+        EOF
+
+    - name: Create tmp dir for kube-state-metrics
+      file:
+        path: /tmp/kube-state-metrics
+        state: directory
+
+    - name: Download kube-state-metrics manifests
+      shell: |
+        curl -sL https://github.com/kubernetes/kube-state-metrics/archive/refs/tags/v2.10.1.tar.gz \
+        | tar zx -C /tmp/kube-state-metrics --strip-components=1
+
+    - name: Deploy kube-state-metrics
+      shell: |
+        kubectl apply -f /tmp/kube-state-metrics/examples/standard/
+
+
+    - name: Verify exporter pods
+      shell: kubectl get pods -A | grep -E "node-exporter|kube-state"
+
+    - name: Verify metric pods
+      shell: kubectl get pods -n kube-system | grep kube-state
+
