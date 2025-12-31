@@ -1,0 +1,188 @@
+- name: Install Monitoring Stack on VM (Node Exporter, Prometheus, Grafana)
+  hosts: VM2
+  become: yes
+
+  vars:
+    node_exporter_version: "1.7.0"
+    prometheus_version: "2.51.2"
+    grafana_apt_repo: "deb https://packages.grafana.com/oss/deb stable main"
+
+  tasks:
+    - name: Install required packages
+      apt:
+        name:
+          - wget
+          - curl
+          - tar
+          - apt-transport-https
+          - software-properties-common
+        update_cache: yes
+
+    # =========================
+    # NODE EXPORTER (VM)
+    # =========================
+    - name: Create node-exporter user
+      user:
+        name: node_exporter
+        shell: /usr/sbin/nologin
+        system: yes
+
+    - name: Download node-exporter
+      get_url:
+        url: "https://github.com/prometheus/node_exporter/releases/download/v{{ node_exporter_version }}/node_exporter-{{ node_exporter_version }}.linux-amd64.tar.gz"
+        dest: /tmp/node_exporter.tar.gz
+
+    - name: Extract node-exporter
+      unarchive:
+        src: /tmp/node_exporter.tar.gz
+        dest: /tmp
+        remote_src: yes
+
+    - name: Install node-exporter binary
+      copy:
+        src: "/tmp/node_exporter-{{ node_exporter_version }}.linux-amd64/node_exporter"
+        dest: /usr/local/bin/node_exporter
+        owner: node_exporter
+        group: node_exporter
+        mode: '0755'
+        remote_src: yes
+
+    - name: Create systemd service for node-exporter
+      copy:
+        dest: /etc/systemd/system/node-exporter.service
+        content: |
+          [Unit]
+          Description=Node Exporter
+          After=network.target
+
+          [Service]
+          User=node_exporter
+          ExecStart=/usr/local/bin/node_exporter
+
+          [Install]
+          WantedBy=multi-user.target
+
+    - name: Start node-exporter
+      systemd:
+        name: node-exporter
+        enabled: yes
+        state: started
+        daemon_reload: yes
+
+    # =========================
+    # PROMETHEUS
+    # =========================
+    - name: Create prometheus user
+      user:
+        name: prometheus
+        shell: /usr/sbin/nologin
+        system: yes
+
+    - name: Create prometheus directories
+      file:
+        path: "{{ item }}"
+        state: directory
+        owner: prometheus
+        group: prometheus
+      loop:
+        - /etc/prometheus
+        - /var/lib/prometheus
+
+    - name: Download Prometheus
+      get_url:
+        url: "https://github.com/prometheus/prometheus/releases/download/v{{ prometheus_version }}/prometheus-{{ prometheus_version }}.linux-amd64.tar.gz"
+        dest: /tmp/prometheus.tar.gz
+
+    - name: Extract Prometheus
+      unarchive:
+        src: /tmp/prometheus.tar.gz
+        dest: /tmp
+        remote_src: yes
+
+    - name: Install Prometheus binaries
+      copy:
+        src: "/tmp/prometheus-{{ prometheus_version }}.linux-amd64/{{ item }}"
+        dest: /usr/local/bin/{{ item }}
+        owner: prometheus
+        group: prometheus
+        mode: '0755'
+        remote_src: yes
+      loop:
+        - prometheus
+        - promtool
+
+    - name: Install Prometheus config
+      copy:
+        dest: /etc/prometheus/prometheus.yml
+        owner: prometheus
+        group: prometheus
+        content: |
+          global:
+            scrape_interval: 15s
+
+          scrape_configs:
+            - job_name: 'node-exporter-vm-provisioning'
+              static_configs:
+                - targets: ['localhost:9100']
+
+            - job_name: 'k3s-node-exporter'
+              kubernetes_sd_configs:
+                - role: endpoints
+                  kubeconfig_file: /etc/prometheus/kubeconfig
+              relabel_configs:
+                - source_labels: [__meta_kubernetes_namespace]
+                  action: keep
+                  regex: monitoring
+
+                - source_labels: [__meta_kubernetes_service_name]
+                  action: keep
+                  regex: node-exporter
+
+
+    - name: Create Prometheus systemd service
+      copy:
+        dest: /etc/systemd/system/prometheus.service
+        content: |
+          [Unit]
+          Description=Prometheus
+          After=network.target
+
+          [Service]
+          User=prometheus
+          ExecStart=/usr/local/bin/prometheus \
+            --config.file=/etc/prometheus/prometheus.yml \
+            --storage.tsdb.path=/var/lib/prometheus
+
+          [Install]
+          WantedBy=multi-user.target
+
+    - name: Start Prometheus
+      systemd:
+        name: prometheus
+        enabled: yes
+        state: started
+        daemon_reload: yes
+
+    # =========================
+    # GRAFANA
+    # =========================
+    - name: Add Grafana GPG key
+      apt_key:
+        url: https://packages.grafana.com/gpg.key
+        state: present
+
+    - name: Add Grafana repository
+      apt_repository:
+        repo: "{{ grafana_apt_repo }}"
+        state: present
+
+    - name: Install Grafana
+      apt:
+        name: grafana
+        update_cache: yes
+
+    - name: Start Grafana
+      systemd:
+        name: grafana-server
+        enabled: yes
+        state: started
