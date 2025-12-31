@@ -56,3 +56,17 @@ jobs:
           git status
           git commit -am "Update myapp image to ${{ steps.docker_build.outputs.digest }}"
           git push origin main
+
+      - name: Update staging image in GitOps repo
+        run: |
+          rm -rf gitops
+          git clone https://${{ secrets.GITOPS_TOKEN }}@github.com/irwanmaul34/project-devops-gitops.git gitops
+          cd gitops/staging
+
+          sed -i "s|image:.*|image: irwan34/python-app:${{ github.sha }}|" deployment.yaml
+
+          git config user.email "ci@github.com"
+          git config user.name "github-actions"
+          git add deployment.yaml
+          git commit -m "chore(staging): update image to ${{ github.sha }}"
+          git push origin main
